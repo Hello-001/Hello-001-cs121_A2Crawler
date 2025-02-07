@@ -24,8 +24,8 @@ def extract_next_links(url, resp):
     except Exception as e:
         print(f"Error extracting links from {url}: {e}")
     
-    return links # // returns a list;
-
+    return links # // returns a list
+    
 def is_valid(url):
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
