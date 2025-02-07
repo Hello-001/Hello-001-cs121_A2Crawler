@@ -25,7 +25,14 @@ def extract_next_links(url, resp):
         print(f"Error extracting links from {url}: {e}")
     
     return links # // returns a list
-    
+
+    """ 
+    note from taiki: server must be down right now. getting a keyerror of name 'type'
+    will continue to test to see if function works later
+    students in discord are also having the same issues with the server- though it was working for them earlier as well
+    """
+
+
 def is_valid(url):
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
