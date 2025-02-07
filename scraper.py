@@ -15,10 +15,26 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    if resp.status != 200:
-        return []
+<<<<<<< HEAD
+=======
+    links = [] # // defining a list because i have to return a list
+    try:
+        soup = BeautifulSoup(resp.raw_response.content, "html.parser") # // use html parser to parse the content
+        for anchor in soup.find_all("a", href=True): # // this works because i am using BeautifulSoup and it has a find_all method
+            absolute_link = urljoin(url, anchor["href"])  # Convert relative links to absolute
+            links.append(absolute_link)
+    except Exception as e:
+        print(f"Error extracting links from {url}: {e}")
+    
+    return links # // returns a list
 
-    return list()
+    """ 
+    note from taiki: server must be down right now. getting a keyerror of name 'type'
+    will continue to test to see if function works later
+    students in discord are also having the same issues with the server- though it was working for them earlier as well
+    """
+
+>>>>>>> 7f52b733b002c191ccf953f3d170a38ae2027c40
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
