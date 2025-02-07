@@ -15,7 +15,16 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+    links = [] # // defining a list because i have to return a list
+    try:
+        soup = BeautifulSoup(resp.raw_response.content, "html.parser") # // use html parser to parse the content
+        for anchor in soup.find_all("a", href=True): # // this works because i am using BeautifulSoup and it has a find_all method
+            absolute_link = urljoin(url, anchor["href"])  # Convert relative links to absolute
+            links.append(absolute_link)
+    except Exception as e:
+        print(f"Error extracting links from {url}: {e}")
+    
+    return links # // returns a list;
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
