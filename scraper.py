@@ -40,7 +40,7 @@ def extract_next_links(url, resp):
     students in discord are also having the same issues with the server- though it was working for them earlier as well
     """
     """
-    note from ian: Server issues, trying to fix why the frontier isn't getting the links
+    note from ian: Server issues can't get anyresponses from server, trying to fix why the frontier isn't getting the links
     """
 
 def is_valid(url):
