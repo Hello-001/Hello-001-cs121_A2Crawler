@@ -1,6 +1,7 @@
 import re
 from urllib.parse import urlparse
 from urllib.parse import urljoin
+from urllib.parse import quote
 from bs4 import BeautifulSoup
 from configparser import ConfigParser
 
@@ -30,7 +31,8 @@ def extract_next_links(url, resp):
         for anchor in test: # // this works because i am using BeautifulSoup and it has a find_all method
             if anchor not in passed_link:
                 absolute_link = urljoin(url, anchor["href"])  # Convert relative links to absolute
-                links.append(absolute_link)
+                links_add = quote(absolute_link)
+                links.append(links_add)
                 passed_link.append(absolute_link)
             # config.set('LOCAL_PROPERTIES','SAVE',absolute_link)
             # with open('config.ini','w') as file:
