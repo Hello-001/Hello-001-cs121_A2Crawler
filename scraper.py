@@ -32,6 +32,7 @@ def extract_next_links(url, resp):
             if anchor not in passed_link:
                 absolute_link = urljoin(url, anchor["href"])  # Convert relative links to absolute
                 links_add = quote(absolute_link)
+                
                 links.append(links_add)
                 passed_link.append(absolute_link)
             # config.set('LOCAL_PROPERTIES','SAVE',absolute_link)
