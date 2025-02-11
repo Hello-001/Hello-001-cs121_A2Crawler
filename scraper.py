@@ -2,6 +2,8 @@ import re
 from urllib.parse import urlparse, urljoin, quote
 from bs4 import BeautifulSoup
 
+# testing if push/pull works
+
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
