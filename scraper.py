@@ -46,9 +46,6 @@ def extract_next_links(url, resp):
     return list(links)  # finally i convert set back to list before returning
 
 def is_valid(url):
-    """
-    Determines whether a given URL should be crawled.
-    """
     try:
         parsed = urlparse(url)
         # check if the URL is an HTTP or HTTPS link
