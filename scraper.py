@@ -1,66 +1,97 @@
 import re
-from urllib.parse import urlparse
-from urllib.parse import urljoin
-from urllib.parse import quote
+from urllib.parse import urlparse, urljoin, quote
 from bs4 import BeautifulSoup
-from configparser import ConfigParser
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
-    # Implementation required.
-    # url: the URL that was used to get the page
-    # resp.url: the actual url of the page
-    # resp.status: the status code returned by the server. 200 is OK, you got the page. Other numbers mean that there was some kind of problem.
-    # resp.error: when status is not 200, you can check the error here, if needed.
-    # resp.raw_response: this is where the page actually is. More specifically, the raw_response has two parts:
-    #         resp.raw_response.url: the url, again
-    #         resp.raw_response.content: the content of the page!
-    # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-
-
-    links = [] # // defining a list because i have to return a list
+    links = set()  # using a set here would avoid duplicates
+    # although the project specification says to use a list, I think a set is better here
+    # in the end, we can convert the set back into a list, which may seem inefficient 
+    # converting a set to list is O(n) and it's simpler to implement
+    # meanwhile having duplication checks in a list would be O(n) as well but more complex implementation
+    
+    # check if the response is valid and has a raw response
     try:
-        config = ConfigParser()
-        soup = BeautifulSoup(resp.raw_response.content, "html.parser") # // use html parser to parse the content
-        test = soup.find_all("a", href=True)
-        passed_link = []
+        if resp.status != 200 or not resp.raw_response:
+            return []
+        
+        # here we use BeautifulSoup to parse the HTML content as professor 
+        soup = BeautifulSoup(resp.raw_response.content, "html.parser")
 
-        for anchor in test: # // this works because i am using BeautifulSoup and it has a find_all method
-            if anchor not in passed_link:
-                absolute_link = urljoin(url, anchor["href"])  # Convert relative links to absolute
-                links_add = quote(absolute_link)
-                
-                links.append(links_add)
-                passed_link.append(absolute_link)
-            # config.set('LOCAL_PROPERTIES','SAVE',absolute_link)
-            # with open('config.ini','w') as file:
-            #     config.write(file)
-    except Exception as e:
-        print(f"Error extracting links from {url}: {e}")
-    return links # // returns a list
+        # find all the anchor tags in the HTML content
+        for anchor in soup.find_all("a", href=True):
+            href = anchor["href"].strip()
 
+            # resolve relative URLs
+            absolute_link = urljoin(url, href).split("#")[0]  # Remove fragments
+
+            # quote the URL to handle special characters
+            absolute_link = quote(absolute_link, safe=":/?=&")
+
+            # calling is_valid and is_crawler_trap to check if the URL is valid and not a crawler trap
+            # this should work as long as is_valid is implemented correctly
+            # was having problems earlier but it should be good now? KEEP WATCH
+            if is_valid(absolute_link) and not is_crawler_trap(absolute_link):
+                links.add(absolute_link)
+        
+    # catch any exceptions that may occur during the parsing nicely
+    except Exception:
+        pass # could include sum error message here later
+
+    # except Exception is too broad can implement more specific error checking later
+
+    return list(links)  # finally i convert set back to list before returning
 
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
-    # If you decide to crawl it, return True; otherwise return False.
-    # There are already some conditions that return False.
+    """
+    Determines whether a given URL should be crawled.
+    """
     try:
         parsed = urlparse(url)
-        if parsed.scheme not in set(["http", "https"]):
+        # check if the URL is an HTTP or HTTPS link
+        if parsed.scheme not in {"http", "https"}:
             return False
-        return not re.match(
-            r".*\.(css|js|bmp|gif|jpe?g|ico"
-            + r"|png|tiff?|mid|mp2|mp3|mp4"
-            + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
-            + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-            + r"|epub|dll|cnf|tgz|sha1"
-            + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
 
-    except TypeError:
-        print ("TypeError for ", parsed)
-        raise
+        # in the project requirement prof asks for us to only crawl the following domains
+        # made a set of allowed domains to check if the URL belongs to one of them
+        # if it doesn't belong to any of them, return False
+        allowed_domains = {"ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"}
+        if not any(parsed.netloc.endswith(domain) for domain in allowed_domains):
+            return False  
+        # and this one excludes common non-HTML file formats
+        invalid_extensions = re.compile(
+            r".*\.(css|js|bmp|gif|jpg|jpeg|png|tiff|mp2|mp3|mp4|wav|avi|mov|mpeg|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|tar|gz|7z|iso)$",
+            re.IGNORECASE,
+        )
+        if invalid_extensions.match(parsed.path):
+            return False
+        
+        return True
+    except Exception:
+        return False
+
+def is_crawler_trap(url):
+    parsed = urlparse(url) # parse the URL
+    path_components = parsed.path.split("/") # split the path into components
+
+    # this one simply avoids URLs with execessive repeating patterns
+    # a bit iffy on these first two checks but hopefully works!
+    if len(path_components) > 10:
+        return True
+    # this one just avoids URL with super long query parameters LOL
+    # I'm not sure if this is a good idea but it's a simple check, aka dyanmic trap
+    if len(parsed.query) > 100:
+        return True
+    # this will avoid session IDs in the URL like we learned in class where it has session, sid, phpsessid, jsessionid, sessid, or token in the query
+    if re.search(r"(session|sid|phpsessid|jsessionid|sessid|token)=[a-zA-Z0-9]+", parsed.query, re.IGNORECASE):
+        return True
+    # this will avoid calendar traps like we learned in class where the URL has a date, year, month, day, or calendar in the query
+    if re.search(r"(date=|year=|month=|day=|calendar=)", parsed.query, re.IGNORECASE):
+        return True
+    # this one will redirect loops, which are URLs containing redirect or similar keywordss
+    if "redirect" in parsed.path.lower() or "redirect" in parsed.query.lower(): # check if its in the path or the query too
+        return True
+    return False
