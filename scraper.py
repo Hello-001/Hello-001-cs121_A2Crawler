@@ -40,7 +40,7 @@ def extract_next_links(url, resp):
                 ###############################################
                 # addind something for the robots.txt
                 url_added = urllib.robotparser.RobotFileParse()
-                if url_added.can_fetch(*, absolute_link):
+                if url_added.can_fetch('*', absolute_link):
                     url_added.set_url(f'{absolute_link}/robot.txt')
                     links.add(url_added)
                 else:
