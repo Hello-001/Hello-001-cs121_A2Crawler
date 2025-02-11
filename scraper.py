@@ -1,5 +1,6 @@
 import re
 from urllib.parse import urlparse, urljoin, quote
+import urllib.robotparser
 from bs4 import BeautifulSoup
 
 # testing if push/pull works
@@ -32,12 +33,18 @@ def extract_next_links(url, resp):
 
             # quote the URL to handle special characters
             absolute_link = quote(absolute_link, safe=":/?=&")
-
             # calling is_valid and is_crawler_trap to check if the URL is valid and not a crawler trap
             # this should work as long as is_valid is implemented correctly
             # was having problems earlier but it should be good now? KEEP WATCH
             if is_valid(absolute_link) and not is_crawler_trap(absolute_link):
-                links.add(absolute_link)
+                ###############################################
+                # addind something for the robots.txt
+                url_added = urllib.robotparser.RobotFileParse()
+                if url_added.can_fetch(*, absolute_link):
+                    url_added.set_url(f'{absolute_link}/robot.txt')
+                    links.add(url_added)
+                else:
+                    links.add(absolute_link)
         
     # catch any exceptions that may occur during the parsing nicely
     except Exception:
