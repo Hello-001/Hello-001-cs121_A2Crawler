@@ -39,7 +39,7 @@ def extract_next_links(url, resp):
             if is_valid(absolute_link) and not is_crawler_trap(absolute_link):
                 ###############################################
                 # addind something for the robots.txt
-                url_added = urllib.robotparser.RobotFileParse()
+                url_added = urllib.robotparser.RobotFileParser()
                 if url_added.can_fetch('*', absolute_link):
                     url_added.set_url(f'{absolute_link}/robot.txt')
                     links.add(url_added)
