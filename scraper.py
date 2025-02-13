@@ -37,12 +37,14 @@ def extract_next_links(url, resp):
             # this should work as long as is_valid is implemented correctly
             # was having problems earlier but it should be good now? KEEP WATCH
             if is_valid(absolute_link) and not is_crawler_trap(absolute_link):
-                ###############################################
-                # addind something for the robots.txt
+                # trying to implement robot.txt, got to figure out why it is messing up
+                temp_value = (f'{absolute_link}/robot.txt')
                 url_added = urllib.robotparser.RobotFileParser()
+                url_added.set_url(temp_value)
+                url_added.read()
                 if url_added.can_fetch('*', absolute_link):
-                    url_added.set_url(f'{absolute_link}/robot.txt')
-                    links.add(url_added)
+                    url_added.read()
+                    links.add(absolute_link)
                 else:
                     links.add(absolute_link)
         
@@ -95,7 +97,7 @@ def is_crawler_trap(url):
     if re.search(r"(session|sid|phpsessid|jsessionid|sessid|token)=[a-zA-Z0-9]+", parsed.query, re.IGNORECASE):
         return True
     # this will avoid calendar traps like we learned in class where the URL has a date, year, month, day, or calendar in the query
-    if re.search(r"(date=|year=|month=|day=|calendar=)", parsed.query, re.IGNORECASE):
+    if re.search(r"(date|year|month|day|calendar)=\d{1,4}\b", parsed.query, re.IGNORECASE):
         return True
     # this one will redirect loops, which are URLs containing redirect or similar keywordss
     if "redirect" in parsed.path.lower() or "redirect" in parsed.query.lower(): # check if its in the path or the query too
