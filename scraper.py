@@ -99,6 +99,8 @@ def is_crawler_trap(url):
     # this will avoid calendar traps like we learned in class where the URL has a date, year, month, day, or calendar in the query
     if re.search(r"(date|year|month|day|calendar)=\d{1,4}\b", parsed.query, re.IGNORECASE):
         return True
+    if re.search('date|year|month|day|calender',parsed.query, re.IGNORECASE):
+        return True
     # this one will redirect loops, which are URLs containing redirect or similar keywordss
     if "redirect" in parsed.path.lower() or "redirect" in parsed.query.lower(): # check if its in the path or the query too
         return True
