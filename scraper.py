@@ -10,25 +10,52 @@ def scraper(url, resp):
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
-    # Implementation required.
-    # url: the URL that was used to get the page
-    # resp.url: the actual url of the page
-    # resp.status: the status code returned by the server. 200 is OK, you got the page. Other numbers mean that there was some kind of problem.
-    # resp.error: when status is not 200, you can check the error here, if needed.
-    # resp.raw_response: this is where the page actually is. More specifically, the raw_response has two parts:
-    #         resp.raw_response.url: the url, again
-    #         resp.raw_response.content: the content of the page!
-    # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    links = []
-    try:
-        soup = BeautifulSoup(resp.raw_response.content, "html.parser")
-        for anchor in soup.find_all("a", href=True):
-            absolute_link = urljoin(url, anchor["href"])  # Convert relative links to absolute
-            links.append(absolute_link)
-    except Exception as e:
-        print(f"Error extracting links from {url}: {e}")
+    links = set()  # using a set here would avoid duplicates
+    # although the project specification says to use a list, I think a set is better here
+    # in the end, we can convert the set back into a list, which may seem inefficient 
+    # converting a set to list is O(n) and it's simpler to implement
+    # meanwhile having duplication checks in a list would be O(n) as well but more complex implementation
     
-    return links # // returns a list;
+    # check if the response is valid and has a raw response
+    try:
+        if resp.status != 200 or not resp.raw_response:
+            return []
+        
+        # here we use BeautifulSoup to parse the HTML content as professor 
+        soup = BeautifulSoup(resp.raw_response.content, "html.parser")
+
+        # find all the anchor tags in the HTML content
+        for anchor in soup.find_all("a", href=True):
+            href = anchor["href"].strip()
+
+            # resolve relative URLs
+            absolute_link = urljoin(url, href).split("#")[0]  # Remove fragments
+
+            # quote the URL to handle special characters
+            absolute_link = quote(absolute_link, safe=":/?=&")
+            # calling is_valid and is_crawler_trap to check if the URL is valid and not a crawler trap
+            # this should work as long as is_valid is implemented correctly
+            # was having problems earlier but it should be good now? KEEP WATCH
+            if is_valid(absolute_link) and not is_crawler_trap(absolute_link):
+                # trying to implement robot.txt, got to figure out why it is messing up
+                # temp_value = (f'{absolute_link}/robots.txt')
+                temp_value = urljoin(absolute_link,'/robots.txt')
+                url_added = urllib.robotparser.RobotFileParser()
+                url_added.set_url(temp_value)
+                url_added.read()
+                if url_added.can_fetch('*', absolute_link):
+                    # url_added.read()
+                    links.add(absolute_link)
+                # else:
+                #     links.add(absolute_link)
+        
+    # catch any exceptions that may occur during the parsing nicely
+    except Exception:
+        pass # could include sum error message here later
+
+    # except Exception is too broad can implement more specific error checking later
+
+    return list(links)  # finally i convert set back to list before returning
 
 def is_valid(url):
     try:
@@ -54,6 +81,8 @@ def is_valid(url):
         return True
     except Exception:
         return False
+
+    # test
 
 def is_crawler_trap(url):
     parsed = urlparse(url) # parse the URL
