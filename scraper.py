@@ -1,5 +1,9 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, quote
+import urllib.robotparser
+from bs4 import BeautifulSoup
+
+# testing if push/pull works
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -27,23 +31,51 @@ def extract_next_links(url, resp):
     return links # // returns a list;
 
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
-    # If you decide to crawl it, return True; otherwise return False.
-    # There are already some conditions that return False.
     try:
         parsed = urlparse(url)
-        if parsed.scheme not in set(["http", "https"]):
+        # check if the URL is an HTTP or HTTPS link
+        if parsed.scheme not in {"http", "https"}:
             return False
-        return not re.match(
-            r".*\.(css|js|bmp|gif|jpe?g|ico"
-            + r"|png|tiff?|mid|mp2|mp3|mp4"
-            + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
-            + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-            + r"|epub|dll|cnf|tgz|sha1"
-            + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
 
-    except TypeError:
-        print ("TypeError for ", parsed)
-        raise
+        # in the project requirement prof asks for us to only crawl the following domains
+        # made a set of allowed domains to check if the URL belongs to one of them
+        # if it doesn't belong to any of them, return False
+        allowed_domains = {"ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"}
+        if not any(parsed.netloc.endswith(domain) for domain in allowed_domains):
+            return False  
+        # and this one excludes common non-HTML file formats
+        invalid_extensions = re.compile(
+            r".*\.(css|js|bmp|gif|jpg|jpeg|png|tiff|mp2|mp3|mp4|wav|avi|mov|mpeg|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|tar|gz|7z|iso)$",
+            re.IGNORECASE,
+        )
+        if invalid_extensions.match(parsed.path):
+            return False
+        
+        return True
+    except Exception:
+        return False
+
+def is_crawler_trap(url):
+    parsed = urlparse(url) # parse the URL
+    path_components = parsed.path.split("/") # split the path into components
+
+    # this one simply avoids URLs with execessive repeating patterns
+    # a bit iffy on these first two checks but hopefully works!
+    if len(path_components) > 10:
+        return True
+    # this one just avoids URL with super long query parameters LOL
+    # I'm not sure if this is a good idea but it's a simple check, aka dyanmic trap
+    if len(parsed.query) > 100:
+        return True
+    # this will avoid session IDs in the URL like we learned in class where it has session, sid, phpsessid, jsessionid, sessid, or token in the query
+    if re.search(r"(session|sid|phpsessid|jsessionid|sessid|token)=[a-zA-Z0-9]+", parsed.query, re.IGNORECASE):
+        return True
+    # this will avoid calendar traps like we learned in class where the URL has a date, year, month, day, or calendar in the query
+    if re.search(r"(date|year|month|day|calendar)=\d{1,4}\b", parsed.query, re.IGNORECASE):
+        return True
+    if re.search('date|year|month|day|calender|event|events',parsed.query, re.IGNORECASE):
+        return True
+    # this one will redirect loops, which are URLs containing redirect or similar keywordss
+    if "redirect" in parsed.path.lower() or "redirect" in parsed.query.lower(): # check if its in the path or the query too
+        return True
+    return False
