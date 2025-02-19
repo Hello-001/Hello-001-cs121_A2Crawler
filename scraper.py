@@ -1,78 +1,98 @@
 import re
-from urllib.parse import urlparse, urljoin, quote
+from urllib.parse import urlparse, urljoin, unquote
 import urllib.robotparser
 from bs4 import BeautifulSoup
+from simhash import Simhash
 
-# testing if push/pull works
+robots_cache = {}
+visited_hashes = set()  # Store SimHashes instead of full URLs
+
+def normalize_url(url):
+    while True:
+        decoded_url = unquote(url)
+        if decoded_url == url:  # stop if no more decoding needed
+            break
+        url = decoded_url  
+
+    url = url.lower().strip()  
+    url = re.sub(r"/+", "/", url)  
+    url = url.rstrip("/")  
+    return url
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
-def extract_next_links(url, resp):
-    links = set()  # using a set here would avoid duplicates
-    # although the project specification says to use a list, I think a set is better here
-    # in the end, we can convert the set back into a list, which may seem inefficient 
-    # converting a set to list is O(n) and it's simpler to implement
-    # meanwhile having duplication checks in a list would be O(n) as well but more complex implementation
-    
-    # check if the response is valid and has a raw response
+def fetch_robots_txt(domain):
+    temp_value = f"https://{domain}/robots.txt"
+    url_added = urllib.robotparser.RobotFileParser()
+    url_added.set_url(temp_value)
     try:
-        if resp.status != 200 or not resp.raw_response:
+        url_added.read()
+        robots_cache[domain] = url_added
+    except Exception:
+        robots_cache[domain] = None  # Assume allowed if fetch fails
+
+def extract_next_links(url, resp):
+    links = set()
+    try:
+        if getattr(resp, 'status', None) != 200 or not getattr(resp, 'raw_response', None):
             return []
-        
-        # here we use BeautifulSoup to parse the HTML content as professor 
+
+        url = normalize_url(url)
+
+        # Compute SimHash of the page content
+        page_text = BeautifulSoup(resp.raw_response.content, "html.parser").get_text()
+        page_hash = Simhash(page_text).value
+
+        # Check if a similar page already exists (near-duplicate detection)
+        for existing_hash in visited_hashes:
+            if Simhash(existing_hash).distance(Simhash(page_hash)) < 3:  # Allow small variations
+                return []  # Skip duplicate page
+
+        visited_hashes.add(page_hash)  # Store new page hash
+
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
 
-        # find all the anchor tags in the HTML content
         for anchor in soup.find_all("a", href=True):
             href = anchor["href"].strip()
+            absolute_link = normalize_url(urljoin(url, href).split("#")[0])
 
-            # resolve relative URLs
-            absolute_link = urljoin(url, href).split("#")[0]  # Remove fragments
+            # **Keep ALL existing crawler trap checks**
+            if is_crawler_trap(absolute_link):
+                continue
 
-            # quote the URL to handle special characters
-            absolute_link = quote(absolute_link, safe=":/?=&")
-            # calling is_valid and is_crawler_trap to check if the URL is valid and not a crawler trap
-            # this should work as long as is_valid is implemented correctly
-            # was having problems earlier but it should be good now? KEEP WATCH
-            if is_valid(absolute_link) and not is_crawler_trap(absolute_link):
-                # trying to implement robot.txt, got to figure out why it is messing up
-                # temp_value = (f'{absolute_link}/robots.txt')
-                temp_value = urljoin(absolute_link,'/robots.txt')
-                url_added = urllib.robotparser.RobotFileParser()
-                url_added.set_url(temp_value)
-                url_added.read()
-                if url_added.can_fetch('*', absolute_link):
-                    # url_added.read()
-                    links.add(absolute_link)
-                # else:
-                #     links.add(absolute_link)
-        
-    # catch any exceptions that may occur during the parsing nicely
+            domain = urlparse(absolute_link).netloc
+            if domain not in robots_cache:
+                fetch_robots_txt(domain)
+
+            if robots_cache.get(domain) and not robots_cache[domain].can_fetch('*', absolute_link):
+                continue  # Skip if robots.txt blocks access
+
+            links.add(absolute_link)
+
     except Exception:
-        pass # could include sum error message here later
+        pass
 
-    # except Exception is too broad can implement more specific error checking later
-
-    return list(links)  # finally i convert set back to list before returning
+    return list(links)
 
 def is_valid(url):
     try:
         parsed = urlparse(url)
-        # check if the URL is an HTTP or HTTPS link
+
+        # **Check all crawler trap conditions first!**
+        if is_crawler_trap(url):
+            return False  
+
         if parsed.scheme not in {"http", "https"}:
             return False
 
-        # in the project requirement prof asks for us to only crawl the following domains
-        # made a set of allowed domains to check if the URL belongs to one of them
-        # if it doesn't belong to any of them, return False
         allowed_domains = {"ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"}
         if not any(parsed.netloc.endswith(domain) for domain in allowed_domains):
             return False  
-        # and this one excludes common non-HTML file formats
+
         invalid_extensions = re.compile(
-            r".*\.(css|js|bmp|gif|jpg|jpeg|png|tiff|mp2|mp3|mp4|wav|avi|mov|mpeg|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|tar|gz|7z|iso)$",
+            r".*\.(css|js|bmp|gif|jpg|jpeg|png|tiff|mp2|mp3|mp4|wav|avi|mov|mpeg|doc|docx|xls|xlsx|ppt|pptx|zip|tar|gz|7z|iso)$",
             re.IGNORECASE,
         )
         if invalid_extensions.match(parsed.path):
@@ -82,29 +102,37 @@ def is_valid(url):
     except Exception:
         return False
 
-    # test
-
 def is_crawler_trap(url):
-    parsed = urlparse(url) # parse the URL
-    path_components = parsed.path.split("/") # split the path into components
+    parsed = urlparse(url)
+    decoded_query = unquote(parsed.query)  # Decode query before checking
+    path_components = parsed.path.split("/")
 
-    # this one simply avoids URLs with execessive repeating patterns
-    # a bit iffy on these first two checks but hopefully works!
+    # **All original crawler trap checks remain**
     if len(path_components) > 10:
         return True
-    # this one just avoids URL with super long query parameters LOL
-    # I'm not sure if this is a good idea but it's a simple check, aka dyanmic trap
-    if len(parsed.query) > 100:
+
+    if len(decoded_query) > 100:
         return True
-    # this will avoid session IDs in the URL like we learned in class where it has session, sid, phpsessid, jsessionid, sessid, or token in the query
-    if re.search(r"(session|sid|phpsessid|jsessionid|sessid|token)=[a-zA-Z0-9]+", parsed.query, re.IGNORECASE):
+
+    if re.search(r"%25{3,}", url) or re.search(r"%2[EFef]", url, re.IGNORECASE):
         return True
-    # this will avoid calendar traps like we learned in class where the URL has a date, year, month, day, or calendar in the query
-    if re.search(r"(date|year|month|day|calendar)=\d{1,4}\b", parsed.query, re.IGNORECASE):
+
+    if re.search(r"(%[0-9A-Fa-f]{2}){5,}", url):  # 5+ consecutive encodings
         return True
-    if re.search('date|year|month|day|calender|event|events',parsed.query, re.IGNORECASE):
+
+    if re.search(r"(session|sid|phpsessid|jsessionid|sessid|token)=[a-zA-Z0-9]+", decoded_query, re.IGNORECASE):
         return True
-    # this one will redirect loops, which are URLs containing redirect or similar keywordss
-    if "redirect" in parsed.path.lower() or "redirect" in parsed.query.lower(): # check if its in the path or the query too
+
+    if re.search(r"(tab_files|do|ns)=.*", decoded_query, re.IGNORECASE):
+        return True  
+
+    if re.search(r"(date|year|month|day|calendar)=\d{1,4}\b", decoded_query, re.IGNORECASE):
         return True
+
+    if re.search(r"(date|year|month|day|calendar|event|events)", decoded_query, re.IGNORECASE):
+        return True
+
+    if "redirect" in parsed.path.lower() or "redirect" in decoded_query.lower():
+        return True
+
     return False
